@@ -1,0 +1,55 @@
+$breakpoints: (
+  'sm': 576px,
+  'md': 768px,
+  'lg': 992px,
+  'xl': 1200px,
+);
+
+@mixin respond-to($breakpoint) {
+  @if map-has-key($breakpoints, $breakpoint) {
+    @media (max-width: map-get($breakpoints, $breakpoint)) {
+      @content;
+    }
+  } @else {
+    @warn "Breakpoint #{$breakpoint} not found in $breakpoints";
+  }
+}
+
+@mixin respond-above($breakpoint) {
+  @if map-has-key($breakpoints, $breakpoint) {
+    @media (min-width: map-get($breakpoints, $breakpoint)) {
+      @content;
+    }
+  } @else {
+    @warn "Breakpoint #{$breakpoint} not found in $breakpoints";
+  }
+}
+
+// Utility classes for responsive hiding
+.hide-sm {
+  @include respond-to('sm') {
+    display: none !important;
+  }
+}
+
+.hide-md {
+  @include respond-to('md') {
+    display: none !important;
+  }
+}
+
+.show-sm {
+  display: none !important;
+
+  @include respond-to('sm') {
+    display: block !important;
+  }
+}
+
+.show-md {
+  display: none !important;
+
+  @include respond-to('md') {
+    display: block !important;
+  }
+}

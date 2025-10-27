@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
 
 class Database {
   constructor() {
@@ -20,6 +21,7 @@ class Database {
       } else {
         console.log('✅ Connected to SQLite database');
         this.createTables();
+        this.seedInitialData();
       }
     });
   }
@@ -78,6 +80,20 @@ class Database {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
       );
+
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        booking_id INTEGER,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        is_sent BOOLEAN DEFAULT FALSE,
+        sent_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        FOREIGN KEY (booking_id) REFERENCES bookings (id)
+      );
     `;
 
     this.db.exec(schema, (err) => {
@@ -87,6 +103,81 @@ class Database {
         console.log('✅ Database tables initialized');
       }
     });
+  }
+
+  async seedInitialData() {
+    try {
+      const adminExists = await new Promise((resolve) => {
+        this.db.get("SELECT id FROM users WHERE email = 'admin@cosmetology.ru'", (err, row) => {
+          resolve(!!row);
+        });
+      });
+
+      if (!adminExists) {
+        const adminPasswordHash = await bcrypt.hash('admin123', 10);
+        await this.createUser({
+          email: 'admin@cosmetology.ru',
+          phone: '+79990000000',
+          passwordHash: adminPasswordHash,
+          name: 'Администратор',
+          surname: 'Системы',
+          role: 'admin',
+        });
+        console.log('✅ Admin user created');
+      }
+
+      // ПРОВЕРЯЕМ СУЩЕСТВУЮЩИЕ УСЛУГИ ПО ИМЕНИ, а не просто наличие любой услуги
+      const servicesExist = await new Promise((resolve) => {
+        this.db.get(
+          "SELECT id FROM services WHERE name = 'Ультразвуковая чистка лица'",
+          (err, row) => {
+            resolve(!!row);
+          },
+        );
+      });
+
+      if (!servicesExist) {
+        const initialServices = [
+          {
+            name: 'Ультразвуковая чистка лица',
+            category: 'Чистка лица',
+            description: 'Глубокая очистка пор с помощью ультразвука',
+            price: 1800.0,
+            duration: 60,
+          },
+          {
+            name: 'Комбинированная чистка лица',
+            category: 'Чистка лица',
+            description: 'Комплексная чистка с ручной и аппаратной обработкой',
+            price: 2500.0,
+            duration: 90,
+          },
+          {
+            name: 'Массаж лица комбинированный',
+            category: 'Массаж лица',
+            description: 'Расслабляющий и тонизирующий массаж',
+            price: 1500.0,
+            duration: 45,
+          },
+          {
+            name: 'S-уход',
+            category: 'Уход лица с массажем',
+            description: 'Базовый уход за кожей лица',
+            price: 1500.0,
+            duration: 45,
+          },
+        ];
+
+        for (const service of initialServices) {
+          await this.createService(service);
+        }
+        console.log('✅ Initial services created');
+      } else {
+        console.log('✅ Services already exist, skipping creation');
+      }
+    } catch (error) {
+      console.error('Error seeding initial data:', error);
+    }
   }
 
   // User methods
@@ -108,6 +199,7 @@ class Database {
             name,
             surname,
             role,
+            telegramConnected: false,
           });
         }
       });
@@ -156,7 +248,41 @@ class Database {
     });
   }
 
+  async findUserByPhoneOrEmail(phoneOrEmail) {
+    return new Promise((resolve, reject) => {
+      const sql = 'SELECT * FROM users WHERE (email = ? OR phone = ?) AND is_active = TRUE';
+
+      this.db.get(sql, [phoneOrEmail, phoneOrEmail], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
+        }
+      });
+    });
+  }
+
   // Service methods
+  async createService(serviceData) {
+    return new Promise((resolve, reject) => {
+      const { name, category, description, price, duration } = serviceData;
+
+      const sql = `INSERT INTO services (name, category, description, price, duration) 
+                   VALUES (?, ?, ?, ?, ?)`;
+
+      this.db.run(sql, [name, category, description, price, duration], function (err) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({
+            id: this.lastID,
+            ...serviceData,
+          });
+        }
+      });
+    });
+  }
+
   async getServices() {
     return new Promise((resolve, reject) => {
       const sql = 'SELECT * FROM services WHERE is_active = TRUE ORDER BY category, name';
@@ -256,7 +382,8 @@ class Database {
 
   async getTelegramLinkByCode(code) {
     return new Promise((resolve, reject) => {
-      const sql = 'SELECT * FROM telegram_links WHERE link_code = ?';
+      const sql =
+        'SELECT * FROM telegram_links WHERE link_code = ? AND expires_at > datetime("now")';
 
       this.db.get(sql, [code], (err, row) => {
         if (err) {
@@ -265,6 +392,62 @@ class Database {
           resolve(row);
         }
       });
+    });
+  }
+
+  async verifyTelegramLink(code, telegramId, telegramUsername) {
+    return new Promise((resolve, reject) => {
+      const self = this; // Сохраняем контекст
+
+      // Сначала находим ссылку
+      self.db.get(
+        'SELECT * FROM telegram_links WHERE link_code = ? AND is_verified = FALSE AND expires_at > datetime("now")',
+        [code],
+        (err, link) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+
+          if (!link) {
+            reject(new Error('Invalid or expired link code'));
+            return;
+          }
+
+          // Обновляем запись в telegram_links
+          self.db.run(
+            `UPDATE telegram_links 
+             SET telegram_id = ?, telegram_username = ?, is_verified = TRUE 
+             WHERE link_code = ?`,
+            [telegramId, telegramUsername, code],
+            function (updateErr) {
+              if (updateErr) {
+                reject(updateErr);
+                return;
+              }
+
+              // Обновляем пользователя
+              self.db.run(
+                `UPDATE users 
+                 SET telegram_id = ?, telegram_username = ? 
+                 WHERE id = ?`,
+                [telegramId, telegramUsername, link.user_id],
+                function (userUpdateErr) {
+                  if (userUpdateErr) {
+                    reject(userUpdateErr);
+                  } else {
+                    resolve({
+                      userId: link.user_id,
+                      telegramId,
+                      telegramUsername,
+                    });
+                  }
+                },
+              );
+            },
+          );
+        },
+      );
     });
   }
 
@@ -277,6 +460,20 @@ class Database {
           reject(err);
         } else {
           resolve({ userId });
+        }
+      });
+    });
+  }
+
+  async getUserByTelegramId(telegramId) {
+    return new Promise((resolve, reject) => {
+      const sql = 'SELECT * FROM users WHERE telegram_id = ? AND is_active = TRUE';
+
+      this.db.get(sql, [telegramId], (err, row) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row);
         }
       });
     });

@@ -1,5 +1,4 @@
 const { Telegraf } = require('telegraf');
-const Database = require('../database/db');
 
 class TelegramBot {
   constructor(token, db) {
@@ -20,9 +19,11 @@ class TelegramBot {
 
     // Обработка кодов привязки
     this.bot.on('text', async (ctx) => {
-      const message = ctx.message.text;
+      const message = ctx.message.text.trim();
       const chatId = ctx.message.chat.id;
-      const username = ctx.message.from.username;
+      const username = ctx.message.from.username || ctx.message.from.first_name;
+
+      console.log(`Received message: ${message} from chat: ${chatId}`);
 
       // Проверяем, является ли сообщение кодом привязки (6 символов)
       if (message.length === 6 && /^[A-Z0-9]{6}$/.test(message)) {
@@ -48,7 +49,7 @@ class TelegramBot {
               'Пожалуйста, получите новый код в личном кабинете и попробуйте снова.',
           );
         }
-      } else {
+      } else if (!message.startsWith('/')) {
         ctx.reply(
           'Отправьте мне 6-значный код привязки, который вы получили в личном кабинете.\n\n' +
             'Если у вас нет кода, зайдите в личный кабинет и нажмите "Привязать Telegram".',
@@ -126,9 +127,15 @@ class TelegramBot {
     this.bot
       .launch()
       .then(() => {
-        console.log('Telegram bot started');
+        console.log('✅ Telegram bot started successfully');
       })
-      .catch(console.error);
+      .catch((error) => {
+        console.error('❌ Error starting Telegram bot:', error);
+      });
+
+    // Включить graceful stop
+    process.once('SIGINT', () => this.bot.stop('SIGINT'));
+    process.once('SIGTERM', () => this.bot.stop('SIGTERM'));
   }
 
   stop() {
