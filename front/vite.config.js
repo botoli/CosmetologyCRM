@@ -4,9 +4,12 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 3001,
+    port: 3000,
   },
   build: {
     outDir: 'dist',
+    sourcemap: false,
   },
+  // Добавьте base URL для продакшена
+  base: 'postgresql://postgres:zgzHxGuffugmfWlRosAkAMBOaHzSpjZv@postgres.railway.internal:5432/railway',
 });
