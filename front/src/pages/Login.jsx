@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
-import '../styles/auth.scss';
+import '../styles/Auth.scss';
 
 const Login = () => {
   const [formData, setFormData] = useState({
