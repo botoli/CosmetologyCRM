@@ -8,8 +8,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false,
+    emptyOutDir: true, // ← ОЧИЩАЕТ папку при каждой сборке
   },
-  // Добавьте base URL для продакшена
-  base: 'postgresql://postgres:zgzHxGuffugmfWlRosAkAMBOaHzSpjZv@postgres.railway.internal:5432/railway',
+  publicDir: 'public', // ← Указывает папку для статических файлов
 });
