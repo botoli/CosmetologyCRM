@@ -1,0 +1,121 @@
+// styles/ServiceCard.scss
+.service-card {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--accent-primary);
+  }
+
+  .service-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+
+    .service-name {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.3;
+    }
+
+    .service-category {
+      background: var(--accent-primary);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+  }
+
+  .service-description {
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+    flex: 1;
+  }
+
+  .service-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+
+    .service-detail {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      .detail-label {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+      }
+
+      .detail-value {
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+    }
+  }
+
+  .book-button {
+    width: 100%;
+    background: var(--accent-gradient);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    &:disabled {
+      background: var(--text-muted);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .service-card {
+    padding: 16px;
+
+    .service-header {
+      flex-direction: column;
+      gap: 8px;
+
+      .service-category {
+        align-self: flex-start;
+      }
+    }
+
+    .service-details {
+      .service-detail {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+      }
+    }
+  }
+}

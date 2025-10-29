@@ -1,164 +1,136 @@
-import React, { useContext } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, AuthContext } from './contexts/AuthContext';
-import Header from './components/common/Header';
-import Login from './components/auth/Login';
-import Register from './components/auth/Register';
-import UserProfile from './components/profile/UserProfile';
-import BookingFlow from './components/booking/BookingFlow';
-import AdminDashboard from './components/AdminDashboard';
-import ServiceSelection from './components/booking/ServiceSelection';
-import './styles/globals.css';
+// App.jsx - КОРРЕКТНАЯ ВЕРСИЯ СО СТАРЫМ API
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './hooks/useAuth';
+import Header from './components/Header';
 
-// Компонент для защищенных маршрутов
-const ProtectedRoute = ({ children, requireAdmin = false }) => {
-  const { user, loading } = useContext(AuthContext);
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Profile from './pages/Profile';
+import Services from './pages/Services';
+import Admin from './pages/Admin';
+import './styles/App.scss';
 
-  if (loading) {
-    return (
-      <div className="container">
-        <div className="loading">
-          <div className="loading__spinner"></div>
-          <p>Проверяем авторизацию...</p>
+// Компонент для отображения загрузки
+const LoadingSpinner = () => (
+  <div className="app-loading">
+    <div className="loading-spinner"></div>
+    <p>Загрузка...</p>
+  </div>
+);
+
+// Компонент для обработки ошибок
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    // Без логирования
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="app-error">
+          <h2>Произошла ошибка</h2>
+          <p>Пожалуйста, обновите страницу</p>
+          <button onClick={() => window.location.reload()}>Обновить</button>
         </div>
-      </div>
-    );
+      );
+    }
+
+    return this.props.children;
   }
+}
 
-  if (!user) {
-    return <Navigate to="/login" />;
-  }
-
-  if (requireAdmin && user.role !== 'admin') {
-    return <Navigate to="/" />;
-  }
-
-  return children;
-};
-
-// Компонент для публичных маршрутов (редирект если уже авторизован)
-const PublicRoute = ({ children }) => {
-  const { user, loading } = useContext(AuthContext);
-
-  if (loading) {
-    return (
-      <div className="container">
-        <div className="loading">
-          <div className="loading__spinner"></div>
-          <p>Проверяем авторизацию...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (user) {
-    return <Navigate to="/" />;
-  }
-
-  return children;
-};
-
-// Главный компонент приложения с роутингом
 const AppContent = () => {
-  const { user } = useContext(AuthContext);
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
+  // Функция для определения куда редиректить пользователя
+  const getRedirectPath = () => {
+    if (!user) return '/login';
+    return user.role === 'admin' ? '/admin' : '/services';
+  };
 
   return (
     <div className="app">
       <Header />
       <main className="main-content">
         <Routes>
-          {/* Публичные маршруты */}
+          <Route path="/" element={<Navigate to={getRedirectPath()} replace />} />
           <Route
             path="/login"
             element={
-              <PublicRoute>
+              !user ? (
                 <Login />
-              </PublicRoute>
+              ) : (
+                <Navigate to={user.role === 'admin' ? '/admin' : '/services'} replace />
+              )
             }
           />
           <Route
             path="/register"
             element={
-              <PublicRoute>
+              !user ? (
                 <Register />
-              </PublicRoute>
+              ) : (
+                <Navigate to={user.role === 'admin' ? '/admin' : '/services'} replace />
+              )
             }
           />
-
-          {/* Защищенные маршруты для всех авторизованных */}
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <UserProfile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/booking"
-            element={
-              <ProtectedRoute>
-                <BookingFlow />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" replace />} />
           <Route
             path="/services"
             element={
-              <ProtectedRoute>
-                <ServiceSelection />
-              </ProtectedRoute>
+              user && user.role !== 'admin' ? (
+                <Services />
+              ) : (
+                <Navigate to={user ? '/admin' : '/login'} replace />
+              )
             }
           />
-
-          {/* Маршруты только для админов */}
           <Route
-            path="/admin/*"
+            path="/admin"
             element={
-              <ProtectedRoute requireAdmin={true}>
-                <AdminDashboard />
-              </ProtectedRoute>
+              user && user.role === 'admin' ? (
+                <Admin />
+              ) : (
+                <Navigate to={user ? '/services' : '/login'} replace />
+              )
             }
           />
-
-          {/* Главная страница - разная для админа и пользователя */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                {user?.role === 'admin' ? <Navigate to="/admin" /> : <ServiceSelection />}
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Роут для несуществующих страниц */}
-          <Route
-            path="*"
-            element={
-              <div className="container">
-                <div className="card text-center">
-                  <div className="error-page">
-                    <h1>404</h1>
-                    <p>Страница не найдена</p>
-                    <Navigate to="/" replace />
-                  </div>
-                </div>
-              </div>
-            }
-          />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>
   );
 };
 
-// Главный компонент приложения
-const App = () => {
+function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        {/* Подавляем предупреждения через future flags в Router */}
+        <Router
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}>
+          <AppContent />
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   );
-};
+}
 
 export default App;

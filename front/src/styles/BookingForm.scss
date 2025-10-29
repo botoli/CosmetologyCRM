@@ -1,0 +1,757 @@
+// styles/BookingForm.scss - ОБНОВЛЕННЫЕ СТИЛИ ФОРМЫ ЗАПИСИ
+.booking-form-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-overlay);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  padding: 20px;
+  backdrop-filter: blur(8px);
+  animation: overlayAppear 0.3s ease-out;
+
+  .booking-form {
+    background: var(--bg-card);
+    border-radius: 24px;
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--border-color);
+    animation: modalAppear 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    @media (max-width: 768px) {
+      max-width: 95%;
+      max-height: 95vh;
+    }
+  }
+}
+
+@keyframes overlayAppear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.booking-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 2rem 2rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  border-radius: 24px 24px 0 0;
+  z-index: 10;
+
+  .header-content {
+    h2 {
+      margin: 0 0 0.5rem 0;
+      color: var(--text-primary);
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    p {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 1rem;
+    }
+  }
+
+  .close-button {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+
+    &:hover:not(:disabled) {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.booking-progress {
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+
+  .progress-steps {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 400px;
+    margin: 0 auto;
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--border-color);
+      transform: translateY(-50%);
+      z-index: 1;
+    }
+  }
+
+  .progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+    z-index: 2;
+
+    .step-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--border-color);
+      border: 3px solid var(--bg-secondary);
+      transition: all 0.3s ease;
+    }
+
+    .step-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    &.active {
+      .step-dot {
+        background: var(--accent-primary);
+        border-color: var(--bg-secondary);
+        box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+      }
+
+      .step-label {
+        color: var(--accent-primary);
+        font-weight: 600;
+      }
+    }
+  }
+}
+
+.booking-content {
+  padding: 0;
+}
+
+.booking-step {
+  padding: 2rem;
+  animation: stepAppear 0.3s ease-out;
+
+  &.success-step {
+    text-align: center;
+    padding: 3rem 2rem;
+  }
+}
+
+@keyframes stepAppear {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+
+  .step-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    border: 2px solid var(--border-color);
+    transition: all 0.3s ease;
+
+    &.active {
+      background: var(--accent-primary);
+      border-color: var(--accent-primary);
+      color: white;
+    }
+
+    &.completed {
+      background: var(--success);
+      border-color: var(--success);
+      color: white;
+    }
+  }
+
+  .step-connector {
+    width: 20px;
+    height: 2px;
+    background: var(--border-color);
+  }
+
+  .step-info {
+    h3 {
+      margin: 0 0 0.25rem 0;
+      color: var(--text-primary);
+      font-size: 1.2rem;
+    }
+
+    p {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+  }
+}
+
+// Стили для шага выбора даты
+.date-selection {
+  .date-picker {
+    margin-bottom: 2rem;
+
+    .date-picker-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      font-weight: 600;
+      color: var(--text-primary);
+
+      .label-icon {
+        font-size: 1.1rem;
+      }
+    }
+
+    .date-input {
+      width: 100%;
+      padding: 1rem;
+      border: 2px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 1rem;
+      transition: all 0.3s ease;
+
+      &:focus {
+        outline: none;
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+      }
+    }
+  }
+
+  .quick-dates {
+    .quick-dates-label {
+      display: block;
+      margin-bottom: 1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .quick-dates-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .quick-date-btn {
+      padding: 1rem 0.5rem;
+      border: 2px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-align: center;
+
+      &:hover {
+        border-color: var(--accent-primary);
+        transform: translateY(-2px);
+      }
+
+      &.selected {
+        background: var(--accent-primary);
+        border-color: var(--accent-primary);
+        color: white;
+      }
+
+      .date-day {
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1;
+        margin-bottom: 0.25rem;
+      }
+
+      .date-month {
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-bottom: 0.25rem;
+      }
+
+      .date-weekday {
+        font-size: 0.75rem;
+        color: inherit;
+        opacity: 0.8;
+      }
+    }
+  }
+}
+
+// Стили для шага выбора времени
+.time-selection {
+  .time-period {
+    margin-bottom: 2rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .period-title {
+      color: var(--text-primary);
+      margin-bottom: 1rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+  }
+
+  .time-slots-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .time-slot {
+    padding: 1rem 0.5rem;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+
+    &:hover {
+      border-color: var(--accent-primary);
+      transform: translateY(-2px);
+    }
+
+    &.selected {
+      background: var(--accent-primary);
+      border-color: var(--accent-primary);
+      color: white;
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    }
+  }
+
+  .no-slots-message {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--text-secondary);
+
+    .no-slots-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    h4 {
+      color: var(--text-primary);
+      margin-bottom: 0.5rem;
+    }
+
+    p {
+      margin-bottom: 1.5rem;
+    }
+  }
+}
+
+// Стили для шага подтверждения
+.booking-summary {
+  .summary-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+
+    h4 {
+      color: var(--text-primary);
+      margin-bottom: 1rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+  }
+
+  .summary-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .summary-label {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .summary-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+  }
+}
+
+.booking-details {
+  .form-group {
+    margin-bottom: 1.5rem;
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      font-weight: 600;
+      color: var(--text-primary);
+
+      .label-icon {
+        font-size: 1.1rem;
+      }
+    }
+
+    textarea {
+      width: 100%;
+      padding: 1rem;
+      border: 2px solid var(--border-color);
+      border-radius: 12px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 1rem;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 80px;
+      transition: all 0.3s ease;
+
+      &:focus {
+        outline: none;
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+      }
+
+      &::placeholder {
+        color: var(--text-muted);
+      }
+    }
+
+    .input-hint {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      margin-top: 0.5rem;
+    }
+
+    &.checkbox-group {
+      .checkbox-label {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        cursor: pointer;
+        font-weight: normal;
+        padding: 1rem;
+        border: 2px solid var(--border-color);
+        border-radius: 12px;
+        transition: all 0.3s ease;
+
+        &:hover {
+          border-color: var(--accent-primary);
+          background: rgba(139, 92, 246, 0.05);
+        }
+
+        input[type='checkbox'] {
+          display: none;
+
+          &:checked + .checkmark {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+
+            &::after {
+              display: block;
+            }
+          }
+        }
+
+        .checkmark {
+          width: 20px;
+          height: 20px;
+          border: 2px solid var(--border-color);
+          border-radius: 4px;
+          position: relative;
+          transition: all 0.3s ease;
+          flex-shrink: 0;
+          margin-top: 2px;
+
+          &::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            display: none;
+          }
+        }
+
+        .checkbox-content {
+          .checkbox-title {
+            display: block;
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+          }
+
+          .checkbox-description {
+            display: block;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+          }
+        }
+      }
+    }
+  }
+}
+
+.telegram-promo {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid var(--accent-primary);
+  border-radius: 12px;
+  color: var(--text-primary);
+
+  .promo-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .promo-content {
+    flex: 1;
+
+    strong {
+      color: var(--accent-primary);
+    }
+  }
+}
+
+// Стили для успешного завершения
+.success-step {
+  .success-icon {
+    font-size: 4rem;
+    margin-bottom: 1.5rem;
+    animation: bounce 1s ease-in-out;
+  }
+
+  h2 {
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    font-size: 1.8rem;
+  }
+
+  p {
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+    font-size: 1.1rem;
+  }
+}
+
+.success-details {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+
+  .success-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border-color);
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .item-label {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .item-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+  }
+}
+
+.success-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid var(--success);
+  border-radius: 12px;
+  color: var(--success);
+  margin-bottom: 2rem;
+
+  .notice-icon {
+    font-size: 1.2rem;
+  }
+}
+
+.success-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+
+  @media (max-width: 480px) {
+    flex-direction: column;
+  }
+}
+
+// Общие стили для действий шага
+.step-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+
+  .btn {
+    min-width: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+
+    .btn-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid transparent;
+      border-top: 2px solid currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .btn-icon {
+      font-size: 1.1rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    flex-direction: column-reverse;
+    gap: 1rem;
+
+    .btn {
+      width: 100%;
+    }
+  }
+}
+
+@keyframes bounce {
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+// Адаптивность
+@media (max-width: 768px) {
+  .booking-form-overlay {
+    padding: 10px;
+  }
+
+  .booking-header {
+    padding: 1.5rem 1.5rem 1rem;
+  }
+
+  .booking-step {
+    padding: 1.5rem;
+  }
+
+  .time-slots-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  }
+
+  .quick-dates-grid {
+    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  }
+}

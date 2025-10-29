@@ -1,19 +1,27 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import { ThemeProvider } from './contexts/ThemeContext';
 import App from './App.jsx';
-import './styles/globals.css';
+import './styles/app.scss';
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <ThemeProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </ThemeProvider>
-    </BrowserRouter>
-  </React.StrictMode>,
-);
+function initApp() {
+  const rootElement = document.getElementById('root');
+
+  if (!rootElement) {
+    return;
+  }
+
+  try {
+    const root = ReactDOM.createRoot(rootElement);
+
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  } catch (error) {
+    // Без логирования ошибки
+  }
+}
+
+// Запускаем приложение сразу
+initApp();

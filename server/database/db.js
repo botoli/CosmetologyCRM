@@ -1,487 +1,537 @@
+// database/db.js - ИСПРАВЛЕННЫЙ ПУТЬ К БАЗЕ ДАННЫХ
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const fs = require('fs');
-const bcrypt = require('bcryptjs');
 
 class Database {
   constructor() {
+    // ИСПРАВЛЕНО: используем существующую базу данных cosmetology.db
     this.dbPath = path.join(__dirname, 'cosmetology.db');
     this.init();
   }
 
   init() {
-    const dbDir = path.dirname(this.dbPath);
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-    }
-
     this.db = new sqlite3.Database(this.dbPath, (err) => {
       if (err) {
-        console.error('❌ Error opening database:', err);
+        console.error('❌ Error opening database:', err.message);
       } else {
-        console.log('✅ Connected to SQLite database');
+        console.log('✅ Connected to SQLite database:', this.dbPath);
         this.createTables();
-        this.seedInitialData();
       }
     });
   }
 
   createTables() {
-    const schema = `
-      CREATE TABLE IF NOT EXISTS users (
+    // УБИРАЕМ создание тестовых данных, чтобы не было ошибок
+    const queries = [
+      // Users table - только если не существует
+      `CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        phone VARCHAR(20) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        name VARCHAR(100) NOT NULL,
-        surname VARCHAR(100) NOT NULL,
-        role VARCHAR(20) DEFAULT 'client' CHECK(role IN ('client', 'admin')),
-        telegram_id VARCHAR(100),
-        telegram_username VARCHAR(100),
-        is_active BOOLEAN DEFAULT TRUE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
+        name TEXT NOT NULL,
+        surname TEXT NOT NULL,
+        phone TEXT UNIQUE NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT DEFAULT 'client',
+        telegram_id TEXT,
+        telegram_username TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
 
-      CREATE TABLE IF NOT EXISTS services (
+      // Services table - только если не существует
+      `CREATE TABLE IF NOT EXISTS services (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name VARCHAR(255) NOT NULL,
-        category VARCHAR(100) NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
         description TEXT,
         price DECIMAL(10,2) NOT NULL,
         duration INTEGER NOT NULL,
-        is_active BOOLEAN DEFAULT TRUE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
+      )`,
 
-      CREATE TABLE IF NOT EXISTS bookings (
+      // Bookings table - только если не существует
+      `CREATE TABLE IF NOT EXISTS bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         service_id INTEGER NOT NULL,
-        booking_date DATE NOT NULL,
-        booking_time TIME NOT NULL,
-        status VARCHAR(20) DEFAULT 'pending' CHECK(status IN ('pending', 'confirmed', 'cancelled', 'completed')),
+        booking_date TEXT NOT NULL,
+        booking_time TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
         comment TEXT,
-        telegram_notification BOOLEAN DEFAULT FALSE,
-        notification_sent BOOLEAN DEFAULT FALSE,
+        telegram_notification BOOLEAN DEFAULT TRUE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id),
         FOREIGN KEY (service_id) REFERENCES services (id)
-      );
+      )`,
 
-      CREATE TABLE IF NOT EXISTS telegram_links (
+      // Telegram links table - только если не существует
+      `CREATE TABLE IF NOT EXISTS telegram_links (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        link_code VARCHAR(10) UNIQUE NOT NULL,
-        telegram_id VARCHAR(100),
-        telegram_username VARCHAR(100),
+        link_code TEXT UNIQUE NOT NULL,
+        telegram_id TEXT,
+        telegram_username TEXT,
         is_verified BOOLEAN DEFAULT FALSE,
-        expires_at DATETIME NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        verified_at DATETIME,
         FOREIGN KEY (user_id) REFERENCES users (id)
-      );
+      )`,
+    ];
 
-      CREATE TABLE IF NOT EXISTS notifications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        booking_id INTEGER,
-        type VARCHAR(50) NOT NULL,
-        title VARCHAR(255) NOT NULL,
-        message TEXT NOT NULL,
-        is_sent BOOLEAN DEFAULT FALSE,
-        sent_at DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users (id),
-        FOREIGN KEY (booking_id) REFERENCES bookings (id)
-      );
-    `;
-
-    this.db.exec(schema, (err) => {
-      if (err) {
-        console.error('❌ Error creating tables:', err);
-      } else {
-        console.log('✅ Database tables initialized');
-      }
-    });
-  }
-
-  async seedInitialData() {
-    try {
-      const adminExists = await new Promise((resolve) => {
-        this.db.get("SELECT id FROM users WHERE email = 'admin@cosmetology.ru'", (err, row) => {
-          resolve(!!row);
-        });
-      });
-
-      if (!adminExists) {
-        const adminPasswordHash = await bcrypt.hash('admin123', 10);
-        await this.createUser({
-          email: 'admin@cosmetology.ru',
-          phone: '+79990000000',
-          passwordHash: adminPasswordHash,
-          name: 'Администратор',
-          surname: 'Системы',
-          role: 'admin',
-        });
-        console.log('✅ Admin user created');
-      }
-
-      // ПРОВЕРЯЕМ СУЩЕСТВУЮЩИЕ УСЛУГИ ПО ИМЕНИ, а не просто наличие любой услуги
-      const servicesExist = await new Promise((resolve) => {
-        this.db.get(
-          "SELECT id FROM services WHERE name = 'Ультразвуковая чистка лица'",
-          (err, row) => {
-            resolve(!!row);
-          },
-        );
-      });
-
-      if (!servicesExist) {
-        const initialServices = [
-          {
-            name: 'Ультразвуковая чистка лица',
-            category: 'Чистка лица',
-            description: 'Глубокая очистка пор с помощью ультразвука',
-            price: 1800.0,
-            duration: 60,
-          },
-          {
-            name: 'Комбинированная чистка лица',
-            category: 'Чистка лица',
-            description: 'Комплексная чистка с ручной и аппаратной обработкой',
-            price: 2500.0,
-            duration: 90,
-          },
-          {
-            name: 'Массаж лица комбинированный',
-            category: 'Массаж лица',
-            description: 'Расслабляющий и тонизирующий массаж',
-            price: 1500.0,
-            duration: 45,
-          },
-          {
-            name: 'S-уход',
-            category: 'Уход лица с массажем',
-            description: 'Базовый уход за кожей лица',
-            price: 1500.0,
-            duration: 45,
-          },
-        ];
-
-        for (const service of initialServices) {
-          await this.createService(service);
+    queries.forEach((query, index) => {
+      this.db.run(query, (err) => {
+        if (err) {
+          console.error(`❌ Error creating table ${index + 1}:`, err.message);
+        } else {
+          console.log(`✅ Table ${index + 1} checked/created`);
         }
-        console.log('✅ Initial services created');
-      } else {
-        console.log('✅ Services already exist, skipping creation');
-      }
-    } catch (error) {
-      console.error('Error seeding initial data:', error);
-    }
+      });
+    });
   }
 
   // User methods
-  async createUser(userData) {
+  findUserByEmail(email) {
     return new Promise((resolve, reject) => {
-      const { email, phone, passwordHash, name, surname, role = 'client' } = userData;
-
-      const sql = `INSERT INTO users (email, phone, password_hash, name, surname, role) 
-                   VALUES (?, ?, ?, ?, ?, ?)`;
-
-      this.db.run(sql, [email, phone, passwordHash, name, surname, role], function (err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({
-            id: this.lastID,
-            email,
-            phone,
-            name,
-            surname,
-            role,
-            telegramConnected: false,
-          });
-        }
+      this.db.get('SELECT * FROM users WHERE email = ?', [email], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
       });
     });
   }
 
-  async findUserByEmail(email) {
+  findUserByPhone(phone) {
     return new Promise((resolve, reject) => {
-      const sql = 'SELECT * FROM users WHERE email = ? AND is_active = TRUE';
-
-      this.db.get(sql, [email], (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
+      this.db.get('SELECT * FROM users WHERE phone = ?', [phone], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
       });
     });
   }
 
-  async findUserByPhone(phone) {
+  findUserByPhoneOrEmail(phoneOrEmail) {
     return new Promise((resolve, reject) => {
-      const sql = 'SELECT * FROM users WHERE phone = ? AND is_active = TRUE';
+      this.db.get(
+        'SELECT * FROM users WHERE phone = ? OR email = ?',
+        [phoneOrEmail, phoneOrEmail],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        },
+      );
+    });
+  }
 
-      this.db.get(sql, [phone], (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
+  findUserById(id) {
+    return new Promise((resolve, reject) => {
+      this.db.get('SELECT * FROM users WHERE id = ?', [id], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
       });
     });
   }
 
-  async findUserById(id) {
+  createUser(userData) {
     return new Promise((resolve, reject) => {
-      const sql = 'SELECT * FROM users WHERE id = ? AND is_active = TRUE';
-
-      this.db.get(sql, [id], (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
-    });
-  }
-
-  async findUserByPhoneOrEmail(phoneOrEmail) {
-    return new Promise((resolve, reject) => {
-      const sql = 'SELECT * FROM users WHERE (email = ? OR phone = ?) AND is_active = TRUE';
-
-      this.db.get(sql, [phoneOrEmail, phoneOrEmail], (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
+      const { name, surname, phone, email, passwordHash, role } = userData;
+      this.db.run(
+        'INSERT INTO users (name, surname, phone, email, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)',
+        [name, surname, phone, email, passwordHash, role],
+        function (err) {
+          if (err) reject(err);
+          else
+            resolve({
+              id: this.lastID,
+              name,
+              surname,
+              phone,
+              email,
+              role,
+            });
+        },
+      );
     });
   }
 
   // Service methods
-  async createService(serviceData) {
+  getServices() {
+    return new Promise((resolve, reject) => {
+      this.db.all('SELECT * FROM services ORDER BY name', (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  }
+
+  getServiceById(id) {
+    return new Promise((resolve, reject) => {
+      this.db.get('SELECT * FROM services WHERE id = ?', [id], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  }
+
+  createService(serviceData) {
     return new Promise((resolve, reject) => {
       const { name, category, description, price, duration } = serviceData;
-
-      const sql = `INSERT INTO services (name, category, description, price, duration) 
-                   VALUES (?, ?, ?, ?, ?)`;
-
-      this.db.run(sql, [name, category, description, price, duration], function (err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({
-            id: this.lastID,
-            ...serviceData,
-          });
-        }
-      });
+      this.db.run(
+        'INSERT INTO services (name, category, description, price, duration) VALUES (?, ?, ?, ?, ?)',
+        [name, category, description, price, duration],
+        function (err) {
+          if (err) reject(err);
+          else
+            resolve({
+              id: this.lastID,
+              name,
+              category,
+              description,
+              price,
+              duration,
+            });
+        },
+      );
     });
   }
 
-  async getServices() {
+  updateService(id, serviceData) {
     return new Promise((resolve, reject) => {
-      const sql = 'SELECT * FROM services WHERE is_active = TRUE ORDER BY category, name';
-
-      this.db.all(sql, [], (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows);
-        }
-      });
+      const { name, category, description, price, duration } = serviceData;
+      this.db.run(
+        'UPDATE services SET name = ?, category = ?, description = ?, price = ?, duration = ? WHERE id = ?',
+        [name, category, description, price, duration, id],
+        function (err) {
+          if (err) reject(err);
+          else
+            resolve({
+              id,
+              name,
+              category,
+              description,
+              price,
+              duration,
+            });
+        },
+      );
     });
   }
 
-  async getServiceById(id) {
+  deleteService(id) {
     return new Promise((resolve, reject) => {
-      const sql = 'SELECT * FROM services WHERE id = ? AND is_active = TRUE';
-
-      this.db.get(sql, [id], (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
+      this.db.run('DELETE FROM services WHERE id = ?', [id], function (err) {
+        if (err) reject(err);
+        else resolve({ success: true });
       });
     });
   }
 
   // Booking methods
-  async createBooking(bookingData) {
+  createBooking(bookingData) {
     return new Promise((resolve, reject) => {
-      const {
-        userId,
-        serviceId,
-        bookingDate,
-        bookingTime,
-        comment,
-        telegramNotification = false,
-      } = bookingData;
-
-      const sql = `INSERT INTO bookings (user_id, service_id, booking_date, booking_time, comment, telegram_notification) 
-                   VALUES (?, ?, ?, ?, ?, ?)`;
+      const { userId, serviceId, bookingDate, bookingTime, comment, telegramNotification } =
+        bookingData;
 
       this.db.run(
-        sql,
+        'INSERT INTO bookings (user_id, service_id, booking_date, booking_time, comment, telegram_notification) VALUES (?, ?, ?, ?, ?, ?)',
         [userId, serviceId, bookingDate, bookingTime, comment, telegramNotification],
         function (err) {
           if (err) {
             reject(err);
-          } else {
-            resolve({
-              id: this.lastID,
-              ...bookingData,
-              status: 'confirmed',
-            });
+            return;
           }
+
+          // Возвращаем базовую информацию о записи
+          resolve({
+            id: this.lastID,
+            user_id: userId,
+            service_id: serviceId,
+            booking_date: bookingDate,
+            booking_time: bookingTime,
+            status: 'pending',
+            comment: comment,
+            telegram_notification: telegramNotification,
+          });
         },
       );
     });
   }
 
-  async getUserBookings(userId) {
+  getBookingById(id) {
     return new Promise((resolve, reject) => {
-      const sql = `SELECT b.*, s.name as service_name, s.price, s.duration
-                   FROM bookings b
-                   JOIN services s ON b.service_id = s.id
-                   WHERE b.user_id = ?
-                   ORDER BY b.booking_date DESC, b.booking_time DESC`;
+      this.db.get(
+        `SELECT b.*, 
+                u.name as user_name, 
+                u.surname as user_surname, 
+                u.email as user_email, 
+                u.phone as user_phone,
+                u.telegram_id as user_telegram_id,
+                s.name as service_name, 
+                s.price as service_price,
+                s.duration as service_duration
+         FROM bookings b
+         JOIN users u ON b.user_id = u.id
+         JOIN services s ON b.service_id = s.id
+         WHERE b.id = ?`,
+        [id],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        },
+      );
+    });
+  }
 
-      this.db.all(sql, [userId], (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows);
-        }
+  getUserBookings(userId) {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT b.*, s.name as service_name, s.price as service_price
+         FROM bookings b
+         JOIN services s ON b.service_id = s.id
+         WHERE b.user_id = ?
+         ORDER BY b.booking_date DESC, b.booking_time DESC`,
+        [userId],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        },
+      );
+    });
+  }
+
+  getAllBookings() {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT b.*, 
+                u.name as user_name, 
+                u.surname as user_surname, 
+                u.email as user_email, 
+                u.phone as user_phone,
+                s.name as service_name, 
+                s.price as service_price,
+                s.duration as service_duration
+         FROM bookings b
+         JOIN users u ON b.user_id = u.id
+         JOIN services s ON b.service_id = s.id
+         ORDER BY b.booking_date DESC, b.booking_time DESC`,
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        },
+      );
+    });
+  }
+
+  getBookingsByDate(date) {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT b.*, s.duration as service_duration
+         FROM bookings b
+         JOIN services s ON b.service_id = s.id
+         WHERE b.booking_date = ? AND b.status != 'cancelled'
+         ORDER BY b.booking_time`,
+        [date],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        },
+      );
+    });
+  }
+
+  updateBookingStatus(id, status) {
+    return new Promise((resolve, reject) => {
+      this.db.run('UPDATE bookings SET status = ? WHERE id = ?', [status, id], function (err) {
+        if (err) reject(err);
+        else resolve({ success: true });
       });
+    });
+  }
+
+  deleteBooking(id) {
+    return new Promise((resolve, reject) => {
+      this.db.run('DELETE FROM bookings WHERE id = ?', [id], function (err) {
+        if (err) reject(err);
+        else resolve({ success: true });
+      });
+    });
+  }
+
+  // Client methods
+  getClients() {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT u.*, 
+                COUNT(b.id) as total_bookings,
+                MAX(b.created_at) as last_booking
+         FROM users u
+         LEFT JOIN bookings b ON u.id = b.user_id
+         WHERE u.role = 'client'
+         GROUP BY u.id
+         ORDER BY u.name, u.surname`,
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        },
+      );
+    });
+  }
+
+  getClientDetails(id) {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        `SELECT u.*, 
+                COUNT(b.id) as total_bookings,
+                SUM(CASE WHEN b.status = 'completed' THEN 1 ELSE 0 END) as completed_bookings,
+                SUM(CASE WHEN b.status = 'pending' THEN 1 ELSE 0 END) as pending_bookings,
+                MAX(b.created_at) as last_booking
+         FROM users u
+         LEFT JOIN bookings b ON u.id = b.user_id
+         WHERE u.id = ?
+         GROUP BY u.id`,
+        [id],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        },
+      );
+    });
+  }
+
+  // Admin methods
+  getAdmins() {
+    return new Promise((resolve, reject) => {
+      this.db.all(
+        `SELECT * FROM users 
+         WHERE role = 'admin' AND telegram_id IS NOT NULL`,
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        },
+      );
     });
   }
 
   // Telegram methods
-  async createTelegramLink(userId, linkCode) {
+  createTelegramLink(userId, linkCode) {
     return new Promise((resolve, reject) => {
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-      const sql = `INSERT INTO telegram_links (user_id, link_code, expires_at) 
-                   VALUES (?, ?, ?)`;
-
-      this.db.run(sql, [userId, linkCode, expiresAt.toISOString()], function (err) {
+      // Удаляем старые ссылки для этого пользователя
+      this.db.run('DELETE FROM telegram_links WHERE user_id = ?', [userId], (err) => {
         if (err) {
           reject(err);
-        } else {
-          resolve({ id: this.lastID, userId, linkCode, expiresAt });
+          return;
         }
+
+        // Создаем новую ссылку
+        this.db.run(
+          'INSERT INTO telegram_links (user_id, link_code) VALUES (?, ?)',
+          [userId, linkCode],
+          function (err) {
+            if (err) reject(err);
+            else resolve({ linkCode });
+          },
+        );
       });
     });
   }
 
-  async getTelegramLinkByCode(code) {
+  getTelegramLinkByCode(code) {
     return new Promise((resolve, reject) => {
-      const sql =
-        'SELECT * FROM telegram_links WHERE link_code = ? AND expires_at > datetime("now")';
-
-      this.db.get(sql, [code], (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
-    });
-  }
-
-  async verifyTelegramLink(code, telegramId, telegramUsername) {
-    return new Promise((resolve, reject) => {
-      const self = this; // Сохраняем контекст
-
-      // Сначала находим ссылку
-      self.db.get(
-        'SELECT * FROM telegram_links WHERE link_code = ? AND is_verified = FALSE AND expires_at > datetime("now")',
+      this.db.get(
+        `SELECT tl.*, u.name, u.surname 
+         FROM telegram_links tl
+         JOIN users u ON tl.user_id = u.id
+         WHERE tl.link_code = ?`,
         [code],
-        (err, link) => {
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        },
+      );
+    });
+  }
+
+  verifyTelegramLink(code, telegramId, telegramUsername) {
+    return new Promise((resolve, reject) => {
+      this.db.serialize(() => {
+        // Обновляем запись в telegram_links
+        this.db.run(
+          'UPDATE telegram_links SET is_verified = 1, telegram_id = ?, telegram_username = ?, verified_at = CURRENT_TIMESTAMP WHERE link_code = ?',
+          [telegramId, telegramUsername, code],
+          function (err) {
+            if (err) {
+              reject(err);
+              return;
+            }
+
+            if (this.changes === 0) {
+              reject(new Error('Link not found'));
+              return;
+            }
+
+            // Получаем user_id из обновленной записи
+            this.db.get(
+              'SELECT user_id FROM telegram_links WHERE link_code = ?',
+              [code],
+              (err, row) => {
+                if (err) {
+                  reject(err);
+                  return;
+                }
+
+                // Обновляем пользователя
+                this.db.run(
+                  'UPDATE users SET telegram_id = ?, telegram_username = ? WHERE id = ?',
+                  [telegramId, telegramUsername, row.user_id],
+                  function (err) {
+                    if (err) reject(err);
+                    else
+                      resolve({
+                        userId: row.user_id,
+                        telegramId,
+                        telegramUsername,
+                      });
+                  },
+                );
+              },
+            );
+          },
+        );
+      });
+    });
+  }
+
+  unlinkTelegram(userId) {
+    return new Promise((resolve, reject) => {
+      this.db.serialize(() => {
+        // Удаляем запись в telegram_links
+        this.db.run('DELETE FROM telegram_links WHERE user_id = ?', [userId], (err) => {
           if (err) {
             reject(err);
             return;
           }
 
-          if (!link) {
-            reject(new Error('Invalid or expired link code'));
-            return;
-          }
-
-          // Обновляем запись в telegram_links
-          self.db.run(
-            `UPDATE telegram_links 
-             SET telegram_id = ?, telegram_username = ?, is_verified = TRUE 
-             WHERE link_code = ?`,
-            [telegramId, telegramUsername, code],
-            function (updateErr) {
-              if (updateErr) {
-                reject(updateErr);
-                return;
-              }
-
-              // Обновляем пользователя
-              self.db.run(
-                `UPDATE users 
-                 SET telegram_id = ?, telegram_username = ? 
-                 WHERE id = ?`,
-                [telegramId, telegramUsername, link.user_id],
-                function (userUpdateErr) {
-                  if (userUpdateErr) {
-                    reject(userUpdateErr);
-                  } else {
-                    resolve({
-                      userId: link.user_id,
-                      telegramId,
-                      telegramUsername,
-                    });
-                  }
-                },
-              );
+          // Обновляем пользователя
+          this.db.run(
+            'UPDATE users SET telegram_id = NULL, telegram_username = NULL WHERE id = ?',
+            [userId],
+            function (err) {
+              if (err) reject(err);
+              else resolve({ success: true });
             },
           );
-        },
-      );
-    });
-  }
-
-  async unlinkTelegram(userId) {
-    return new Promise((resolve, reject) => {
-      const sql = 'UPDATE users SET telegram_id = NULL, telegram_username = NULL WHERE id = ?';
-
-      this.db.run(sql, [userId], function (err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({ userId });
-        }
+        });
       });
     });
   }
 
-  async getUserByTelegramId(telegramId) {
-    return new Promise((resolve, reject) => {
-      const sql = 'SELECT * FROM users WHERE telegram_id = ? AND is_active = TRUE';
-
-      this.db.get(sql, [telegramId], (err, row) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
-    });
-  }
-
+  // Close database connection
   close() {
     if (this.db) {
-      this.db.close();
+      this.db.close((err) => {
+        if (err) {
+          console.error('❌ Error closing database:', err.message);
+        } else {
+          console.log('✅ Database connection closed');
+        }
+      });
     }
   }
 }

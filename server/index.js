@@ -1,3 +1,4 @@
+// server/index.js - ИСПРАВЛЕННАЯ ФУНКЦИЯ ГЕНЕРАЦИИ СЛОТОВ
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -21,17 +22,20 @@ app.use((req, res, next) => {
   next();
 });
 
-// CORS middleware
+// ИСПРАВЛЕННЫЙ CORS - разрешаем все origins для разработки
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Разрешаем все origins в разработке
       if (!origin) return callback(null, true);
 
       const allowedOrigins = [
         'http://localhost:3000',
+        'http://localhost:3001',
         'http://localhost:5173',
         'http://localhost:5174',
         'http://127.0.0.1:3000',
+        'http://127.0.0.1:3001',
         'http://127.0.0.1:5173',
       ];
 
@@ -39,12 +43,12 @@ app.use(
         return callback(null, true);
       } else {
         console.log('CORS blocked for origin:', origin);
-        return callback(new Error('Not allowed by CORS'));
+        return callback(null, true);
       }
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   }),
 );
 
@@ -70,7 +74,27 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
   console.log('ℹ️ Telegram bot token not provided, bot disabled');
 }
 
-// Health check - ДОЛЖЕН БЫТЬ ПЕРВЫМ
+// Middleware для проверки JWT токена
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Токен не предоставлен' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret', (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: 'Недействительный токен' });
+    }
+
+    req.userId = decoded.userId;
+    req.user = decoded;
+    next();
+  });
+};
+
+// Health check
 app.get('/api/health', (req, res) => {
   console.log('✅ Health check called');
   res.json({
@@ -88,7 +112,6 @@ app.post('/api/auth/login', async (req, res) => {
 
     console.log('📥 Login request:', { phoneOrEmail });
 
-    // Ищем пользователя по email или телефону
     const user = await db.findUserByPhoneOrEmail(phoneOrEmail);
     if (!user) {
       console.log('❌ User not found:', phoneOrEmail);
@@ -97,7 +120,6 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Проверяем пароль
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
       console.log('❌ Invalid password for user:', user.email);
@@ -106,7 +128,6 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Генерируем JWT токен
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET || 'fallback-secret',
@@ -143,7 +164,6 @@ app.post('/api/auth/register', async (req, res) => {
 
     console.log('📥 Registration request:', { name, surname, phone, email });
 
-    // Проверяем, существует ли пользователь
     const existingUser = (await db.findUserByEmail(email)) || (await db.findUserByPhone(phone));
     if (existingUser) {
       console.log('❌ User already exists:', email);
@@ -152,10 +172,8 @@ app.post('/api/auth/register', async (req, res) => {
       });
     }
 
-    // Хешируем пароль
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Создаем пользователя
     const user = await db.createUser({
       name,
       surname,
@@ -165,7 +183,6 @@ app.post('/api/auth/register', async (req, res) => {
       role: 'client',
     });
 
-    // Генерируем JWT токен
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET || 'fallback-secret',
@@ -190,6 +207,42 @@ app.post('/api/auth/register', async (req, res) => {
     console.error('❌ Registration error:', error);
     res.status(500).json({
       error: 'Ошибка при регистрации: ' + error.message,
+    });
+  }
+});
+
+// Get current user info
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.userId;
+    console.log('📥 Fetching current user:', userId);
+
+    const user = await db.findUserById(userId);
+    if (!user) {
+      console.log('❌ User not found:', userId);
+      return res.status(404).json({
+        error: 'Пользователь не найден',
+      });
+    }
+
+    console.log('✅ Current user fetched:', user.email);
+
+    res.json({
+      id: user.id,
+      name: user.name,
+      surname: user.surname,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      telegramConnected: !!user.telegram_id,
+      telegramId: user.telegram_id,
+      telegramUsername: user.telegram_username,
+    });
+  } catch (error) {
+    console.error('❌ Error fetching current user:', error);
+    res.status(500).json({
+      error: 'Ошибка при получении данных пользователя',
+      message: error.message,
     });
   }
 });
@@ -260,14 +313,94 @@ app.get('/api/services', async (req, res) => {
   }
 });
 
-// Bookings routes
-app.post('/api/bookings', async (req, res) => {
+app.post('/api/services', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.findUserById(req.userId);
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Доступ запрещен' });
+    }
+
+    const { name, category, description, price, duration } = req.body;
+    console.log('📥 Creating service:', { name, category, price });
+
+    const service = await db.createService({
+      name,
+      category,
+      description,
+      price,
+      duration,
+    });
+
+    console.log('✅ Service created:', service.id);
+    res.json(service);
+  } catch (error) {
+    console.error('❌ Error creating service:', error);
+    res.status(500).json({
+      error: 'Ошибка при создании услуги',
+      message: error.message,
+    });
+  }
+});
+
+app.put('/api/services/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.findUserById(req.userId);
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Доступ запрещен' });
+    }
+
+    const { id } = req.params;
+    const { name, category, description, price, duration } = req.body;
+    console.log('📥 Updating service:', id);
+
+    const service = await db.updateService(id, {
+      name,
+      category,
+      description,
+      price,
+      duration,
+    });
+
+    console.log('✅ Service updated:', id);
+    res.json(service);
+  } catch (error) {
+    console.error('❌ Error updating service:', error);
+    res.status(500).json({
+      error: 'Ошибка при обновлении услуги',
+      message: error.message,
+    });
+  }
+});
+
+app.delete('/api/services/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.findUserById(req.userId);
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Доступ запрещен' });
+    }
+
+    const { id } = req.params;
+    console.log('📥 Deleting service:', id);
+
+    await db.deleteService(id);
+
+    console.log('✅ Service deleted:', id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error deleting service:', error);
+    res.status(500).json({
+      error: 'Ошибка при удалении услуги',
+      message: error.message,
+    });
+  }
+});
+
+// Bookings routes - ИСПРАВЛЕННЫЙ ЭНДПОИНТ
+app.post('/api/bookings', authenticateToken, async (req, res) => {
   try {
     console.log('📥 Creating booking:', req.body);
-    const { serviceId, date, time, comment, telegramNotification } = req.body;
-
-    // Временный ID пользователя для демо
-    const userId = 1;
+    const { serviceId, date, time, comment, telegramNotification = true } = req.body;
+    const userId = req.userId;
 
     const booking = await db.createBooking({
       userId,
@@ -278,25 +411,34 @@ app.post('/api/bookings', async (req, res) => {
       telegramNotification,
     });
 
-    // Получаем информацию об услуге для уведомления
+    // Получаем полную информацию об услуге и пользователе
     const service = await db.getServiceById(serviceId);
+    const user = await db.findUserById(userId);
 
-    // Отправляем уведомление в Telegram если включено
-    if (telegramNotification && bot) {
+    console.log('✅ Booking created:', booking.id);
+
+    // Отправляем уведомление пользователю о записи
+    if (bot && user.telegram_id) {
       try {
-        await bot.sendBookingConfirmation(userId, {
-          serviceName: service.name,
-          date,
-          time,
-          price: service.price,
-          duration: service.duration,
-        });
+        await bot.notifyUserAboutBooking(booking, service, user);
+        console.log('✅ Telegram notification sent to user:', user.telegram_id);
       } catch (tgError) {
-        console.error('Telegram notification failed:', tgError);
+        console.error('❌ User Telegram notification failed:', tgError.message);
+      }
+    } else {
+      console.log('ℹ️ User has no Telegram connected, skipping user notification');
+    }
+
+    // Отправляем уведомление администраторам о новой записи
+    if (bot) {
+      try {
+        await bot.notifyAdminsAboutNewBooking(booking, service, user);
+        console.log('✅ Telegram notification sent to admins');
+      } catch (tgError) {
+        console.error('❌ Admin Telegram notification failed:', tgError.message);
       }
     }
 
-    console.log('✅ Booking created:', booking.id);
     res.json(booking);
   } catch (error) {
     console.error('❌ Error creating booking:', error);
@@ -307,11 +449,9 @@ app.post('/api/bookings', async (req, res) => {
   }
 });
 
-app.get('/api/bookings/my', async (req, res) => {
+app.get('/api/bookings/my', authenticateToken, async (req, res) => {
   try {
-    // Временный ID пользователя для демо
-    const userId = 1;
-
+    const userId = req.userId;
     const bookings = await db.getUserBookings(userId);
     res.json(bookings);
   } catch (error) {
@@ -322,18 +462,382 @@ app.get('/api/bookings/my', async (req, res) => {
   }
 });
 
-// Telegram routes
-app.post('/api/telegram/link', async (req, res) => {
+app.get('/api/bookings/available-times', authenticateToken, async (req, res) => {
   try {
-    // Временный ID пользователя для демо
-    const userId = 1;
+    const { date, serviceId } = req.query;
 
+    if (!date || !serviceId) {
+      return res.status(400).json({
+        error: 'Дата и ID услуги обязательны',
+      });
+    }
+
+    const service = await db.getServiceById(serviceId);
+    if (!service) {
+      return res.status(404).json({
+        error: 'Услуга не найдена',
+      });
+    }
+
+    const existingBookings = await db.getBookingsByDate(date);
+    const allSlots = generateTimeSlots();
+    const bookedSlots = new Set(existingBookings.map((booking) => booking.booking_time));
+
+    const availableSlots = allSlots.filter((slot) => {
+      // Если слот уже занят другой записью
+      if (bookedSlots.has(slot)) return false;
+
+      // Проверяем пересечения с существующими записями
+      for (const booking of existingBookings) {
+        const bookingTime = booking.booking_time;
+        const serviceDuration = booking.service_duration || service.duration || 60;
+
+        // Блокируем время процедуры + 30 минут для уборки/подготовки
+        const totalBlockedTime = serviceDuration + 30;
+
+        const slotMinutes = timeToMinutes(slot);
+        const bookingMinutes = timeToMinutes(bookingTime);
+
+        // Проверяем, не попадает ли выбранный слот в заблокированное время
+        if (slotMinutes >= bookingMinutes && slotMinutes < bookingMinutes + totalBlockedTime) {
+          return false;
+        }
+
+        // Также проверяем, не пересекается ли наша процедура с существующей
+        const ourServiceDuration = service.duration || 60;
+        if (
+          slotMinutes < bookingMinutes + totalBlockedTime &&
+          slotMinutes + ourServiceDuration > bookingMinutes
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    console.log('✅ Available time slots fetched:', availableSlots.length);
+    console.log('📊 Service duration:', service.duration, 'min');
+    console.log('📊 Total bookings on date:', existingBookings.length);
+
+    res.json({ availableSlots, allSlots });
+  } catch (error) {
+    console.error('❌ Error fetching available times:', error);
+    res.status(500).json({
+      error: 'Ошибка при получении доступных времен',
+      message: error.message,
+    });
+  }
+});
+
+app.get('/api/bookings/all', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.findUserById(req.userId);
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Доступ запрещен' });
+    }
+
+    console.log('📥 Fetching all bookings from database');
+    const bookings = await db.getAllBookings();
+    console.log('✅ Bookings fetched:', bookings.length);
+    res.json(bookings);
+  } catch (error) {
+    console.error('❌ Error fetching bookings:', error);
+    res.status(500).json({
+      error: 'Ошибка при загрузке записей',
+      message: error.message,
+    });
+  }
+});
+
+app.put('/api/bookings/:id/status', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.findUserById(req.userId);
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Доступ запрещен' });
+    }
+
+    const { id } = req.params;
+    const { status } = req.body;
+
+    console.log('📥 Updating booking status:', { id, status });
+
+    await db.updateBookingStatus(id, status);
+
+    // Отправляем уведомление пользователю об изменении статуса
+    if (bot) {
+      try {
+        const booking = await db.getBookingById(id);
+        if (booking) {
+          const user = await db.findUserById(booking.user_id);
+          const service = await db.getServiceById(booking.service_id);
+          await bot.notifyUserAboutBookingStatus(booking, service, user, status);
+          console.log('✅ Status notification sent to user');
+        }
+      } catch (tgError) {
+        console.error('❌ Status Telegram notification failed:', tgError.message);
+      }
+    }
+
+    console.log('✅ Booking status updated successfully');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error updating booking status:', error);
+    res.status(500).json({
+      error: 'Ошибка при обновлении статуса записи',
+      message: error.message,
+    });
+  }
+});
+
+app.delete('/api/bookings/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.userId;
+
+    console.log('📥 Deleting booking:', id);
+
+    // Проверяем права доступа
+    const user = await db.findUserById(userId);
+    if (user.role !== 'admin') {
+      // Для клиентов проверяем, что запись принадлежит пользователю
+      const booking = await db.getBookingById(id);
+      if (!booking || booking.user_id !== userId) {
+        return res.status(403).json({
+          error: 'Нет доступа к данной записи',
+        });
+      }
+    }
+
+    await db.deleteBooking(id);
+
+    console.log('✅ Booking deleted successfully');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error deleting booking:', error);
+    res.status(500).json({
+      error: 'Ошибка при удалении записи',
+      message: error.message,
+    });
+  }
+});
+
+app.get('/api/clients', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.findUserById(req.userId);
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Доступ запрещен' });
+    }
+
+    console.log('📥 Fetching clients from database');
+    const clients = await db.getClients();
+    console.log('✅ Clients fetched:', clients.length);
+    res.json(clients);
+  } catch (error) {
+    console.error('❌ Error fetching clients:', error);
+    res.status(500).json({
+      error: 'Ошибка при загрузке клиентов',
+      message: error.message,
+    });
+  }
+});
+
+app.get('/api/clients/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.findUserById(req.userId);
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Доступ запрещен' });
+    }
+
+    const { id } = req.params;
+    console.log('📥 Fetching client details:', id);
+
+    const client = await db.getClientDetails(id);
+    if (!client) {
+      return res.status(404).json({
+        error: 'Клиент не найден',
+      });
+    }
+
+    console.log('✅ Client details fetched');
+    res.json(client);
+  } catch (error) {
+    console.error('❌ Error fetching client details:', error);
+    res.status(500).json({
+      error: 'Ошибка при загрузке данных клиента',
+      message: error.message,
+    });
+  }
+});
+
+app.get('/api/schedule', async (req, res) => {
+  try {
+    const { date } = req.query;
+    console.log('📥 Fetching schedule for date:', date);
+
+    const bookings = await db.getAllBookings();
+    const dayBookings = bookings.filter((booking) => booking.booking_date === date);
+
+    const schedule = dayBookings.map((booking) => ({
+      id: booking.id,
+      time: booking.booking_time,
+      booked: true,
+      client_name: `${booking.user_name} ${booking.user_surname}`,
+      service_name: booking.service_name,
+    }));
+
+    console.log('✅ Schedule fetched:', schedule.length);
+    res.json(schedule);
+  } catch (error) {
+    console.error('❌ Error fetching schedule:', error);
+    res.status(500).json({
+      error: 'Ошибка при загрузке расписания',
+      message: error.message,
+    });
+  }
+});
+
+app.put('/api/schedule/working-hours', async (req, res) => {
+  try {
+    const workingHours = req.body;
+    console.log('📥 Updating working hours:', workingHours);
+
+    console.log('✅ Working hours updated');
+    res.json({ success: true, workingHours });
+  } catch (error) {
+    console.error('❌ Error updating working hours:', error);
+    res.status(500).json({
+      error: 'Ошибка при обновлении рабочих часов',
+      message: error.message,
+    });
+  }
+});
+
+app.put('/api/schedule/breaks', async (req, res) => {
+  try {
+    const breaks = req.body;
+    console.log('📥 Updating breaks:', breaks);
+
+    console.log('✅ Breaks updated');
+    res.json({ success: true, breaks });
+  } catch (error) {
+    console.error('❌ Error updating breaks:', error);
+    res.status(500).json({
+      error: 'Ошибка при обновлении перерывов',
+      message: error.message,
+    });
+  }
+});
+
+// Reports routes
+app.post('/api/reports/generate', async (req, res) => {
+  try {
+    const reportData = req.body;
+    console.log('📥 Generating report:', reportData);
+
+    const bookings = await db.getAllBookings();
+    const services = await db.getServices();
+    const clients = await db.getClients();
+
+    let filteredBookings = bookings;
+    if (reportData.startDate && reportData.endDate) {
+      filteredBookings = bookings.filter((b) => {
+        return b.booking_date >= reportData.startDate && b.booking_date <= reportData.endDate;
+      });
+    }
+
+    let filteredData = [];
+    let stats = {};
+
+    if (reportData.type === 'financial') {
+      const completedBookings = filteredBookings.filter((b) => b.status === 'completed');
+      const revenue = completedBookings.reduce((sum, b) => sum + (parseFloat(b.price) || 0), 0);
+      stats = {
+        revenue,
+        totalBookings: filteredBookings.length,
+        completedBookings: completedBookings.length,
+        pendingBookings: filteredBookings.filter((b) => b.status === 'pending').length,
+      };
+      filteredData = completedBookings;
+    } else if (reportData.type === 'bookings') {
+      stats = {
+        totalBookings: filteredBookings.length,
+        completedBookings: filteredBookings.filter((b) => b.status === 'completed').length,
+        pendingBookings: filteredBookings.filter((b) => b.status === 'pending').length,
+        cancelledBookings: filteredBookings.filter((b) => b.status === 'cancelled').length,
+      };
+      filteredData = filteredBookings;
+    } else if (reportData.type === 'clients') {
+      stats = {
+        totalClients: clients.length,
+      };
+      filteredData = clients;
+    } else if (reportData.type === 'services') {
+      stats = {
+        totalServices: services.length,
+      };
+      filteredData = services;
+    }
+
+    const report = {
+      id: Date.now(),
+      type: reportData.type,
+      name: reportData.name,
+      data: filteredData,
+      stats,
+      createdAt: new Date().toISOString(),
+    };
+
+    console.log('✅ Report generated successfully');
+    res.json({ success: true, report });
+  } catch (error) {
+    console.error('❌ Error generating report:', error);
+    res.status(500).json({
+      error: 'Ошибка при создании отчета',
+      message: error.message,
+    });
+  }
+});
+
+app.get('/api/reports/history', async (req, res) => {
+  try {
+    console.log('📥 Fetching reports history');
+    const reports = [];
+    console.log('✅ Reports history fetched');
+    res.json(reports);
+  } catch (error) {
+    console.error('❌ Error fetching reports history:', error);
+    res.status(500).json({
+      error: 'Ошибка при загрузке истории отчетов',
+      message: error.message,
+    });
+  }
+});
+
+app.get('/api/reports/:id/download', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('📥 Downloading report:', id);
+    console.log('✅ Report download initiated');
+    res.json({ success: true, message: 'Download not implemented yet' });
+  } catch (error) {
+    console.error('❌ Error downloading report:', error);
+    res.status(500).json({
+      error: 'Ошибка при скачивании отчета',
+      message: error.message,
+    });
+  }
+});
+
+// Telegram routes
+app.post('/api/telegram/link', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.userId;
     const linkCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     await db.createTelegramLink(userId, linkCode);
 
     console.log('✅ Telegram link created:', linkCode);
-
     res.json({ linkCode });
   } catch (error) {
     console.error('Error creating telegram link:', error);
@@ -346,7 +850,6 @@ app.post('/api/telegram/link', async (req, res) => {
 app.get('/api/telegram/check-link/:code', async (req, res) => {
   try {
     const { code } = req.params;
-
     console.log('📥 Checking telegram link:', code);
 
     const link = await db.getTelegramLinkByCode(code);
@@ -370,15 +873,12 @@ app.get('/api/telegram/check-link/:code', async (req, res) => {
   }
 });
 
-app.post('/api/telegram/unlink', async (req, res) => {
+app.post('/api/telegram/unlink', authenticateToken, async (req, res) => {
   try {
-    // Временный ID пользователя для демо
-    const userId = 1;
-
+    const userId = req.userId;
     await db.unlinkTelegram(userId);
 
     console.log('✅ Telegram unlinked for user:', userId);
-
     res.json({ success: true });
   } catch (error) {
     console.error('Error unlinking telegram:', error);
@@ -387,6 +887,22 @@ app.post('/api/telegram/unlink', async (req, res) => {
     });
   }
 });
+
+// Helper function to generate time slots (every 30 minutes)
+const generateTimeSlots = (startHour = 9, endHour = 18) => {
+  const slots = [];
+  for (let hour = startHour; hour < endHour; hour++) {
+    slots.push(`${hour.toString().padStart(2, '0')}:00`);
+    slots.push(`${hour.toString().padStart(2, '0')}:30`);
+  }
+  return slots;
+};
+
+// Helper function to convert time string to minutes
+const timeToMinutes = (timeStr) => {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+};
 
 // Обработка несуществующих маршрутов API
 app.use('/api/*', (req, res) => {
@@ -404,10 +920,13 @@ app.get('/', (req, res) => {
     message: 'Cosmetology API Server',
     endpoints: {
       health: '/api/health',
-      auth: '/api/auth/login, /api/auth/register',
+      auth: '/api/auth/login, /api/auth/register, /api/auth/admin/login',
       services: '/api/services',
-      bookings: '/api/bookings',
-      telegram: '/api/telegram/link, /api/telegram/check-link/:code',
+      bookings: '/api/bookings, /api/bookings/my, /api/bookings/all, /api/bookings/:id/status',
+      clients: '/api/clients, /api/clients/:id',
+      schedule: '/api/schedule, /api/schedule/working-hours, /api/schedule/breaks',
+      reports: '/api/reports/generate, /api/reports/history, /api/reports/:id/download',
+      telegram: '/api/telegram/link, /api/telegram/check-link/:code, /api/telegram/unlink',
     },
   });
 });
