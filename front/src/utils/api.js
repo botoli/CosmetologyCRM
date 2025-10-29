@@ -1,7 +1,11 @@
-// utils/api.js - ВЕРСИЯ БЕЗ ЛОГИРОВАНИЯ
+// utils/api.js - ОБНОВЛЕННАЯ ВЕРСИЯ
 class Api {
   constructor() {
-    this.baseURL = 'http://localhost:5000';
+    // Динамический базовый URL для продакшена
+    this.baseURL =
+      process.env.NODE_ENV === 'production'
+        ? 'postgresql://postgres:zgzHxGuffugmfWlRosAkAMBOaHzSpjZv@postgres.railway.internal:5432/railway' // ← ЗАМЕНИТЕ на ваш Railway URL
+        : 'http://localhost:5000';
     this.token = null;
   }
 
