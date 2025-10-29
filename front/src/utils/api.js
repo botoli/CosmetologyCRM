@@ -1,11 +1,8 @@
 // utils/api.js - ОБНОВЛЕННАЯ ВЕРСИЯ
 class Api {
   constructor() {
-    // Динамический базовый URL для продакшена
-    this.baseURL =
-      process.env.NODE_ENV === 'production'
-        ? 'postgresql://postgres:zgzHxGuffugmfWlRosAkAMBOaHzSpjZv@shuttle.proxy.rlwy.net:47434/railway' // ← ЗАМЕНИТЕ на ваш Railway URL
-        : 'http://localhost:5000';
+    // ЗАМЕНИТЕ на ваш реальный Railway URL
+    this.baseURL = 'https://backendforcosmetologycrm-production-8b28.up.railway.app';
     this.token = null;
   }
 
