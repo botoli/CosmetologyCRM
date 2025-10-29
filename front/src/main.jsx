@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
-import './styles/app.scss';
+import './styles/App.scss';
 
 function initApp() {
   const rootElement = document.getElementById('root');
