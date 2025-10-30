@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import '../styles/Auth.scss';
+import '/src/styles/Auth.scss';
 
 const Register = () => {
   const [formData, setFormData] = useState({
