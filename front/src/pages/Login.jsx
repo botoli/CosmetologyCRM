@@ -1,8 +1,8 @@
 // pages/Login.jsx - ОБНОВЛЕННАЯ СТРАНИЦА ВХОДА
 import React, { useState, useEffect } from 'react';
+import '/src/styles/Auth.scss';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
-import '/src/styles/Auth.scss';
 
 const Login = () => {
   const [formData, setFormData] = useState({
