@@ -1,6 +1,6 @@
 // pages/Login.jsx - ОБНОВЛЕННАЯ СТРАНИЦА ВХОДА
 import React, { useState, useEffect } from 'react';
-import '/src/styles/Auth.scss';
+import '../styles/Auth.scss';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
 
